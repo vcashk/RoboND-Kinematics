@@ -79,7 +79,7 @@ Using this we need to construct the individual transform matrices as below.
 
 
 ---
-###Step 5: Calculating Wrist Centre (WC) based on target roll, pitch and yaw angles 
+### Step 5: Calculating Wrist Centre (WC) based on target roll, pitch and yaw angles 
 
            ## Calculate Rrpy Rotation Matrix given roll pitch and yaw
     	    R_x = Matrix([[ 1,            0,          0],
@@ -97,7 +97,7 @@ Using this we need to construct the individual transform matrices as below.
 
 
 
-###Project Implementation:
+### Project Implementation:
 • Updated IK server.py file with properly commented python code for calculating Inverse Kinematics based on previously performed Kinematic Analysis. 
 
 ---
