@@ -206,7 +206,7 @@ We can create the Homogeneous transforms between each neighbouring links. For ex
 This is to account for the difference in orientation of the gripper link as it is defined in the URDF and the DH convention, we aplpy a body fixed rotation about the z axis and then the y axis. Therefore the R_correction is the composition of rorations of this z axis and y axis rotation
 
 ### 
-From this correction, we get the Forward kinematics of the Robot arm and one can check this by evaluating the total transform between the base link and the corrected gripper length by evaluating a matrix at some arbitrary joint values and see if it matches the translation component of the end effector.
+From this correction, we get the Forward kinematics of the Robot arm and this maybe verified.
 
 ####  Step 3: Inverse Kinematic
 
