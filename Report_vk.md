@@ -166,7 +166,7 @@ Using this we need to construct the individual transform matrices as below.
 
 ### Step2: Creating the individual transformation matrices
 ###
-We can create the Homogeneous transforms between individueal neighboring links. For example between link 0 and 1, 1 and 2, 2 and 3, all the way between link 6 in the Gripper G. Next, we can begin to incrementally build the total homogenous transform between the base link and the gripper frame , by incrementally post-multiplying individual homogenous transforms.
+We can create the Homogeneous transforms between each neighbouring links. For example between link 0 and 1, 1 and 2, 2 and 3, all the way between link 6 in the Gripper G. Next, we can begin to incrementally build the total homogenous transform between the base link and the gripper frame , by incrementally post-multiplying individual homogenous transforms.
 
 ##### Calculating the Rotation matrix from Homogeneous Transformation matrix, here we are using a generic function:
             def dh_transformation(theta_x, d_dz, theta_z, d_dx):
@@ -208,7 +208,7 @@ This is to account for the difference in orientation of the gripper link as it i
 ### 
 From this correction, we get the Forward kinematics of the Robot arm and one can check this by evaluating the total transform between the base link and the corrected gripper length by evaluating a matrix at some arbitrary joint values and see if it matches the translation component of the end effector.
 
-####  Inverse Kinematic
+####  Step 3: Inverse Kinematic
 
 The Inverse Kinematics is the opposite of Forwards kinematics. Meaning that the position and orientation of the end-effector is known and the goal is to calculate the joint angles of the Arm Robot. However for a Robot Arm with 6 joints, the overall transformation between the base and end effector involves 6 multiples of Equation which can result in a complicated non-linear equation.
 
