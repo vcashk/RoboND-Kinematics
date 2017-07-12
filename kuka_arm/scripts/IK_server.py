@@ -18,138 +18,208 @@ from geometry_msgs.msg import Pose
 from mpmath import *
 from sympy import *
 
+
 def handle_calculate_IK(req):
     rospy.loginfo("Received %s eef-poses from the plan" % len(req.poses))
     if len(req.poses) < 1:
         print "No valid poses received"
         return -1
     else:
-        # Initialize service response
+        #Initialize service response
         joint_trajectory_list = []
+        rospy.loginfo("Initialized Service Response: %s" % len(joint_trajectory_list))
+        # Define DH param symbols
+        # link lengths
+        a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7')
+        # link offsets
+        d1, d2, d3, d4, d5, d6, d7 = symbols('d1:8')
+        # Twist Angles(Alpha)
+        alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
+        # Joint angle symbols(Theta)
+        q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8')
+        # DH Transformation matrix
+        s = {alpha0: 0, a0: 0, d1: 0.75,
+             alpha1: -pi / 2, a1: 0.35, d2: 0, q2: q2 - pi / 2,
+             alpha2: 0, a2: 1.25, d3: 0,
+             alpha3: -pi / 2, a3: -0.054, d4: 1.5,
+             alpha4: pi / 2, a4: 0, d5: 0,
+             alpha5: -pi / 2, a5: 0, d6: 0,
+             alpha6: 0, a6: 0, d7: 0.303, q7: 0}
+        #individual transformation matrices
+
+        t0_1 = dh_transformation(alpha0, a0, q1, d1).subs(s)
+        t1_2 = dh_transformation(alpha1, a1, q2, d2).subs(s)
+        t2_3 = dh_transformation(alpha2, a2, q3, d3).subs(s)
+        t3_4 = dh_transformation(alpha3, a3, q4, d4).subs(s)
+        t4_5 = dh_transformation(alpha4, a4, q5, d5).subs(s)
+        t5_6 = dh_transformation(alpha5, a5, q6, d6).subs(s)
+        t6_7 = dh_transformation(alpha6, a6, q7, d7).subs(s)
+        t0_7 = simplify(t0_1 * t1_2 * t2_3 * t3_4 * t4_5 * t5_6 * t6_7)
+        # Calculated Forward Kinematics including correction for End-Effector alignment axis
+        rotation_correction = correction_matrix()
+        transform_forward_kinematics = simplify(t0_7 * rotation_correction)
+        # Extract rotational component of transform matrix
+        t0_3 = simplify(t0_1 * t1_2 * t2_3)
+        rotation0_3 = t0_3[0:3, 0:3]
         for x in xrange(0, len(req.poses)):
-            # IK code starts here
+            rospy.loginfo("**Starting Inverse Kinematics**")
+            rospy.loginfo("Start End Effector-poses %s" % str(x))
             joint_trajectory_point = JointTrajectoryPoint()
-
-            # Defining the  DH param symbols
-    	    q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8') #theta
-    	    A0, A1, A2, A3, A4, A5, A6 = symbols('A0:7') #alpha
-    	    a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7') #link length
-    	    d1, d2, d3, d4 ,d5, d6, d7 = symbols('d1:8') #link offsets
-      	    theta2 = symbols('theta2') #theta2 calculated
-
-            # Defining the DH params for Kuka KR210
-    	    DH = {A0:     0, a0:      0, d1:  0.75,
-          		  A1: -pi/2, a1:   0.35, d2:     0, q2: theta2-pi/2,
-        		  A2:     0, a2:   1.25, d3:     0,
-        		  A3: -pi/2, a3: -0.054, d4:  1.50,
-        		  A4:  pi/2, a4:      0, d5:     0,
-        		  A5: -pi/2, a5:      0, d6:     0,
-        		  A6:     0, a6:      0, d7: 0.303, q7:           0
-    		 }
-
-            # Extract end-effector position and orientation from request
-    	    # px,py,pz = end-effector position
-    	    # roll, pitch, yaw = end-effector orientation
+            #Extract end-effector position and orientation from request
             px = req.poses[x].position.x
             py = req.poses[x].position.y
             pz = req.poses[x].position.z
-
+            rospy.loginfo("Extracted End-Effector position")
             (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
                 [req.poses[x].orientation.x, req.poses[x].orientation.y,
-                    req.poses[x].orientation.z, req.poses[x].orientation.w])
+                 req.poses[x].orientation.z, req.poses[x].orientation.w])
+            rospy.loginfo("Extracted End-Effector orientation")
 
-    	    ## Calculate Rrpy Rotation Matrix given roll pitch and yaw
-    	    R_x = Matrix([[ 1,            0,          0],
-                		  [ 0,    cos(roll), -sin(roll)],
-                		  [ 0,    sin(roll),  cos(roll)]])
+            #Calculate joint angles using Geometric IK method Close-form
+            rotation_row, rotation_pitch, rotation_yaw = calculate_rotation_for_roll_pitch_yaw(roll, pitch, yaw)
+            rotation0_6 = simplify(rotation_row * rotation_pitch * rotation_yaw)
+            p_end_effector = Matrix([[px], [py], [pz]])
+            joint5 = calculate_wrist_center(p_end_effector, rotation0_6)
 
-    	    R_y = Matrix([[ cos(pitch),     0,  sin(pitch)],
-                		  [          0,     1,           0],
-                		  [-sin(pitch),     0,  cos(pitch)]])
+            # Calculate Theta 1,3,2
+            theta1 = calculate_theta1(joint5)
+            theta3_internal, theta3 = calculate_theta3(joint5, theta1)
+            joint2 = get_joint2(theta1)
+            theta2 = calculate_theta2(joint2, joint5, theta3_internal)
+            #Calculate The Inverse Rotation of Theta 1 Theta 2 and Theta 3
+            rotation0_3_matrix = rotation0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3})
+            rotation0_3_matrix_inverse = rotation0_3_matrix ** -1
 
-    	    R_z = Matrix([[ cos(yaw), -sin(yaw),        0],
-                		  [ sin(yaw),  cos(yaw),        0],
-                		  [        0,         0,        1]])
+            #Calculate Theta 6,5,4
+            rotation3_6 = rotation0_3_matrix_inverse * rotation0_6
+            theta6 = calculate_theta6(rotation3_6)
+            theta5 = calculate_theta5(rotation3_6)
+            theta4 = calculate_theta4(rotation3_6)
 
-    	    Rxyz = R_x*R_y*R_z # calculate the intrinsic rotation
+            # Inverse Kinematics Request
+            # In the next line replace theta1,theta2...,theta6 by your joint angle variables
+            joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
+            joint_trajectory_list.append(joint_trajectory_point)
 
-    	    ### Convert from DH parameter frame to URDF file frame
-    	    R_z_corr = Matrix([[   cos(pi), -sin(pi),           0],
-                		       [   sin(pi),  cos(pi),           0],
-                  		       [          0,         0,           1]])
-    	    R_y_corr = Matrix([[ cos(-pi/2),         0,  sin(-pi/2)],
-                   		       [          0,         1,           0],
-                		       [-sin(-pi/2),         0,  cos(-pi/2)]])
-    	    R_corr = R_z_corr*R_y_corr  # calculate the intrinsic rotation
-    	    Rrpy = R_corr.inv()*Rxyz
+            #Display Forward Kinematics
+            forward_kinematics = transform_forward_kinematics.evalf(
+                subs={q1: theta1, q2: theta2, q3: theta3, q4: theta4, q5: theta5, q6: theta6})
+        rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
+        return CalculateIKResponse(joint_trajectory_list)
 
-    	    ## Calculate wrist center position
-    	    l = 0.15 # from URDF file <joint from gripper_link to right_gripper_finger_link>
-    	    wx = px - (d7.subs(DH)+l)*Rrpy[0,2]
-    	    wy = py - (d7.subs(DH)+l)*Rrpy[1,2]
-    	    wz = pz - (d7.subs(DH)+l)*Rrpy[2,2]
+def calculate_rotation_for_roll_pitch_yaw(roll, pitch, yaw):
+    rotation_roll = Matrix([[1, 0, 0],
+                            [0, cos(roll), -sin(roll)],
+                            [0, sin(roll), cos(roll)]])
 
-    	    ## calculate q1
-    	    q1 = atan2(wy,wx)
+    rotation_pitch = Matrix([[cos(pitch), 0, sin(pitch)],
+                             [0, 1, 0],
+                             [-sin(pitch), 0, cos(pitch)]])
 
-    	    ## Calculate q2 and q3 using the Laws of Cosine
-    	    ### distance from joint_2 to wrist center
-    	    d2_WC = sqrt((wz-d1.subs(DH))**2+(sqrt(wx**2+wy**2)-a1.subs(DH))**2)
-    	    ### angle between d2_wc and x-y plane of base_link
-    	    AWC_2_xybase = atan2(wz-d1.subs(DH),d2_WC)
-    	    ### distance from joint_2 to joint_3
-    	    d2_3 = a2.subs(DH)
-    	    ### distance from joint_3 to wrist center
-    	    d3_WC = sqrt(d4.subs(DH)**2+a3.subs(DH)**2)
-    	    ### angle between d2_3 and d3_WC
-            A2_3_WC = acos((d2_3**2+d3_WC**2-d2_WC**2)/(2*d2_3*d3_WC))
-    	    ### angle between d2_3 and d2_WC
-    	    A3_2_WC = acos((d2_3**2+d2_WC**2-d3_WC**2)/(2*d2_3*d2_WC))
-    	    ### q2 and q3
-    	    Q2 = pi/2-A3_2_WC-AWC_2_xybase
-    	    q3 = pi/2-A2_3_WC
+    rotation_yaw = Matrix([[cos(yaw), -sin(yaw), 0],
+                           [sin(yaw), cos(yaw), 0],
+                           [0, 0, 1]])
+    return rotation_roll, rotation_pitch, rotation_yaw
 
-    	    ## Calculate q4 q5 and q6
-    	    ### Calculate R0_3 Rotation matrix from T0_3 Homogeneous Transformation matrix
-            def mat_transform(A,a,d,q):
-                out = Matrix([[        cos(q),       -sin(q),       0,         a],
-                              [ sin(q)*cos(A), cos(q)*cos(A), -sin(A), -sin(A)*d],
-                              [ sin(q)*sin(A), cos(q)*sin(A),  cos(A),  cos(A)*d],
-                              [             0,             0,       0,         1]])
-                return out
 
-            T0_1 = mat_transform(A0,a0,d1,q1)
-            T0_1 = T0_1.subs(DH)
-            T1_2 = mat_transform(A1,a1,d2,q2)
-            T1_2 = T1_2.subs(DH)
-            T1_2 = T1_2.subs(theta2,Q2)
-            T2_3 = mat_transform(A2,a2,d3,q3)
-            T2_3 = T2_3.subs(DH)
+def dh_transformation(theta_x, d_dz, theta_z, d_dx):
+    return Matrix([[cos(theta_z), -sin(theta_z), 0, d_dz],
+                   [sin(theta_z) * cos(theta_x), cos(theta_z) * cos(theta_x), -sin(theta_x), -sin(theta_x) * d_dx],
+                   [sin(theta_z) * sin(theta_x), cos(theta_z) * sin(theta_x), cos(theta_x), cos(theta_x) * d_dx],
+                   [0, 0, 0, 1]])
 
-    	    T0_3 = T0_1*T1_2*T2_3
-    	    R0_3 = T0_3[0:3,0:3] # convert from Homogeneous transform matrix to rotation matrix
 
-    	    ### Calculate R3_6
-    	    R3_6 = R0_3.inv()*Rrpy
+def do_rotation(axis, angle=None):
+    if axis == "x":
+        return Matrix([[1, 0, 0],
+                       [0, cos(angle), -sin(angle)],
+                       [0, sin(angle), cos(angle)]])
+    elif axis == "y":
+        return Matrix([[cos(angle), 0, sin(angle)],
+                       [0, 1, 0],
+                       [-sin(angle), 0, cos(angle)]])
+    elif axis == "z":
+        return Matrix([[cos(angle), -sin(angle), 0],
+                       [sin(angle), cos(angle), 0],
+                       [0, 0, 1]])
+    else:
+        return None
 
-    	    ## solving for q4,q5,q6
-    	    ### Solve for q5 using the equation cos(q5)-R3_6[1,2] = 0
-    	    Q5 = acos(R3_6[1,2])
-    	    ### Solve for q6 using the equation sin(q5)*cos(q6)-R3_6[1,0] = 0
-    	    Q6 = acos(R3_6[1,0]/sin(Q5))
-    	    ### Solve for q4 using the equation sin(q4)*sin(q5)-R3_6[2,2] = 0
-    	    Q4 = asin(R3_6[2,2]/sin(Q5))
+# Correction need to account of Orientation Difference
+def correction_matrix():
+    r_z = Matrix([[cos(pi), -sin(pi), 0, 0],
+                  [sin(pi), cos(pi), 0, 0],
+                  [0, 0, 1, 0],
+                  [0, 0, 0, 1]])
+    r_y = Matrix([[cos(-pi / 2), 0, sin(-pi / 2), 0],
+                  [0, 1, 0, 0],
+                  [-sin(-pi / 2), 0, cos(-pi / 2), 0],
+                  [0, 0, 0, 1]])
+    return simplify(r_z * r_y)
 
-            ## IK results
-            theta1,theta2,theta3,theta4,theta5,theta6 = q1,Q2,q3,Q4,Q5,Q6
 
-    	    # Populate response for the IK request
-                # In the next line replace theta1,theta2...,theta6 by your joint angle variables
-    	    joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
-    	    joint_trajectory_list.append(joint_trajectory_point)
+def calculate_wrist_center(p_ee, rotation0_6):
+    return simplify(p_ee - 0.303 * rotation0_6 * Matrix([[1], [0], [0]]))
 
-            rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
-            return CalculateIKResponse(joint_trajectory_list)
+
+def calculate_theta1(joint5):
+    return atan2(joint5[1], joint5[0])
+
+
+def get_joint2(theta1):
+    joint2_starting_point = [0.35, 0, 0.75]
+    joint2 = [joint2_starting_point[0] * cos(theta1), joint2_starting_point[0] * sin(theta1), joint2_starting_point[2]]
+    return joint2
+
+
+def calculate_theta3(joint5, theta1):
+    joint3_starting_point = [0.35, 0, 2]
+    joint5_starting_point = [1.85, 0, 1.946]
+    joint2 = get_joint2(theta1)
+    link2_5_on_x = joint5[0] - joint2[0]
+    link2_5_on_y = joint5[1] - joint2[1]
+    link2_5_on_z = joint5[2] - joint2[2]
+    link2_5 = sqrt(link2_5_on_x ** 2 + link2_5_on_y ** 2 + link2_5_on_z ** 2)
+    link2_3_starting_point = 1.25
+    link3_5_starting_point_on_x = joint5_starting_point[0] - joint3_starting_point[0]
+    link3_5_starting_point_on_z = joint5_starting_point[2] - joint3_starting_point[2]
+    link3_5_starting_point = sqrt(link3_5_starting_point_on_x ** 2 + link3_5_starting_point_on_z ** 2)
+    distance = (link2_5 ** 2 - link2_3_starting_point ** 2 - link3_5_starting_point ** 2) / -(
+        2 * link2_3_starting_point * link3_5_starting_point)
+    theta3_internal = atan2(sqrt(1 - distance ** 2), distance)
+    theta3 = pi / 2 - (
+        atan2(sqrt(1 - distance ** 2), distance) - atan2(link3_5_starting_point_on_z, link3_5_starting_point_on_x))
+    return theta3_internal, theta3
+
+
+def calculate_theta2(joint5, joint2, theta3_internal):
+    link2_3_starting_point = 1.25
+    joint3_starting_point = [0.35, 0, 2]
+    joint5_starting_point = [1.85, 0, 1.946]
+
+    link3_5_starting_point_on_x = joint5_starting_point[0] - joint3_starting_point[0]
+    link3_5_starting_point_on_z = joint5_starting_point[2] - joint3_starting_point[2]
+    link3_5_starting_point = sqrt(link3_5_starting_point_on_x ** 2 + link3_5_starting_point_on_z ** 2)
+
+    distance1 = link3_5_starting_point * sin(theta3_internal)
+    distance2 = link2_3_starting_point - link3_5_starting_point * cos(theta3_internal)
+    alpha = atan2(distance1, distance2)
+    beta = atan2(joint5[2] - joint2[2], sqrt((joint5[0] - joint2[0]) ** 2 + (joint5[1] - joint2[1]) ** 2))
+    theta2 = pi / 2 - alpha - beta
+    return theta2
+
+
+def calculate_theta6(rotation3_6):
+    return atan2(rotation3_6[1, 0], rotation3_6[0, 0])  # rotation about Z-axis
+
+
+def calculate_theta5(rotation3_6):
+    return atan2(-rotation3_6[2, 0], sqrt(
+        rotation3_6[0, 0] * rotation3_6[0, 0] + rotation3_6[1, 0] * rotation3_6[1, 0]))  # rotation about Y-axis
+
+
+def calculate_theta4(rotation3_6):
+    return atan2(rotation3_6[2, 1], rotation3_6[2, 2])  # rotation about X-axis
 
 
 def IK_server():
@@ -158,6 +228,7 @@ def IK_server():
     s = rospy.Service('calculate_ik', CalculateIK, handle_calculate_IK)
     print "Ready to receive an IK request"
     rospy.spin()
+
 
 if __name__ == "__main__":
     IK_server()
