@@ -63,7 +63,7 @@ With reference to figure above:
 3. Joint distance di: the distance along the zi−1-axis between the xi−1 and xi axes. 
 4. Joint angle θi: the rotation angle about the zi−1-axis between the xi−1 and xi axes
 
-#####Assumptions:
+Assumptions:
 
 1. A manipulator is made up of links and joints (kinematic chain). The links are rigid and the joints are 1 dof, regardless of type (revolute or prismatic). We can always accomodate multi-dof (universal-type) joints by thinking that a link of length 0 sits between degrees of freedom (d = 0 in H).
 2. There are n + 1 links, numbered from 0 to n, 0 being the base (assumed fixed in this course), and n being the end effector.
@@ -71,7 +71,7 @@ With reference to figure above:
 4. When joint i is actuated, link i moves. Consistently with the numbering,nothing moves link 0.
 5. To each joint there corresponds a single joint variable, qi, which is either the angle of rotation (revolute joint) or the displacement (prismatic joint).
 
-####Denavit-Hartenberg Convention:
+Denavit-Hartenberg Convention:
 
 1. Number the joints from 1 to n starting with base and ending with end-effector.
 2. Establish the base Co-ordinate system
