@@ -27,7 +27,6 @@ def handle_calculate_IK(req):
     else:
         #Initialize service response
         joint_trajectory_list = []
-        rospy.loginfo("Initialized Service Response: %s" % len(joint_trajectory_list))
         # Define DH param symbols
         # link lengths
         a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7')
@@ -62,18 +61,14 @@ def handle_calculate_IK(req):
         t0_3 = simplify(t0_1 * t1_2 * t2_3)
         rotation0_3 = t0_3[0:3, 0:3]
         for x in xrange(0, len(req.poses)):
-            rospy.loginfo("**Starting Inverse Kinematics**")
-            rospy.loginfo("Start End Effector-poses %s" % str(x))
             joint_trajectory_point = JointTrajectoryPoint()
             #Extract end-effector position and orientation from request
             px = req.poses[x].position.x
             py = req.poses[x].position.y
             pz = req.poses[x].position.z
-            rospy.loginfo("Extracted End-Effector position")
             (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
                 [req.poses[x].orientation.x, req.poses[x].orientation.y,
                  req.poses[x].orientation.z, req.poses[x].orientation.w])
-            rospy.loginfo("Extracted End-Effector orientation")
 
             #Calculate joint angles using Geometric IK method Close-form
             rotation_row, rotation_pitch, rotation_yaw = calculate_rotation_for_roll_pitch_yaw(roll, pitch, yaw)
@@ -104,7 +99,6 @@ def handle_calculate_IK(req):
             #Display Forward Kinematics
             forward_kinematics = transform_forward_kinematics.evalf(
                 subs={q1: theta1, q2: theta2, q3: theta3, q4: theta4, q5: theta5, q6: theta6})
-        rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
         return CalculateIKResponse(joint_trajectory_list)
 
 def calculate_rotation_for_roll_pitch_yaw(roll, pitch, yaw):
