@@ -212,7 +212,7 @@ From this correction, we get the Forward kinematics of the Robot arm and this ma
 
 The Inverse Kinematics is the opposite of Forwards kinematics. Meaning that the position and orientation of the end-effector is known and the goal is to calculate the joint angles of the Arm Robot. However for a Robot Arm with 6 joints, the overall transformation between the base and end effector involves 6 multiples of Equation which can result in a complicated non-linear equation.
 
-####There are 2 ways to solve the Inverse Kinematic.
+There are 2 ways to solve the Inverse Kinematic.
 ###
 
 The first consist of purely numerical approach(For example Raphson Algorithm) which is to guess and iterate until the error is sufficiently small or the robot is such an idiot that you give up. 
@@ -230,6 +230,8 @@ It has two main advantages:
 
 1. Quick to solve than numerical approaches
 2. Easier to develop rules 
+
+
 We need the following conditions:
 	1.	Three neighboring joint axes intersect at a single point
 	2.	Three neighboring joint axes are parallel
@@ -255,8 +257,6 @@ By providing the angle value for Joint 1(θ1), Joint 2(θ2) and Joint 3(θ3) int
 
 
 
-
-
 ### Project Implementation:
 • Updated IK server.py file with properly commented python code for calculating Inverse Kinematics based on previously performed Kinematic Analysis. 
 
@@ -271,7 +271,8 @@ This can be further improved. We may apply various techniques to further reduce 
 
 In the simulator the error may be different compared to the real world, the mechanical design specifications, the material used, the velocity, dynamics etc. may also have different outcomes and need to be considered.
 
-We may also create a DeepLearning model to undrstand the same and evolve the model.
+We may also create a DeepLearning model to understand the same and evolve the model.
+
 
 
 ---
